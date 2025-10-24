@@ -194,6 +194,16 @@
     <div id="mainMenu" class="menu">
       <h2>P O N G</h2>
       <p style="margin-bottom: 30px">First to 5 points wins</p>
+      <div class="menu-section">
+        <div class="menu-title">Controls</div>
+        <p><strong>Player 1:</strong> W/S &nbsp;&nbsp;&nbsp; <strong>Player 2:</strong> ↑/↓</p>
+        <p><strong>Pause:</strong> SPACE</p>
+      </div>
+      <div class="menu-section">
+        <div class="menu-title">Cheats</div>
+        <p>[1] Slow-mo &nbsp;&nbsp; [2] Big Paddles &nbsp;&nbsp; [3] Multi-ball</p>
+        <p>[4] Sticky Paddles &nbsp;&nbsp; [F] Release Sticky Balls</p>
+      </div>
       <div class="button-group">
         <button class="button" onclick="showModeMenu()">
           Play with Friend
@@ -273,15 +283,15 @@
 
       // Paddle properties
       const paddleWidth = 15;
-      const paddleHeight = 100;
+      const basePaddleHeight = 100;
       const paddleSpeed = 6;
 
       // Player 1 (Left)
       const player1 = {
         x: 20,
-        y: canvas.height / 2 - paddleHeight / 2,
+        y: canvas.height / 2 - basePaddleHeight / 2,
         width: paddleWidth,
-        height: paddleHeight,
+        height: basePaddleHeight,
         score: 0,
         dy: 0,
       };
@@ -289,9 +299,9 @@
       // Player 2 (Right)
       const player2 = {
         x: canvas.width - 20 - paddleWidth,
-        y: canvas.height / 2 - paddleHeight / 2,
+        y: canvas.height / 2 - basePaddleHeight / 2,
         width: paddleWidth,
-        height: paddleHeight,
+        height: basePaddleHeight,
         score: 0,
         dy: 0,
       };
@@ -305,7 +315,28 @@
         speed: 5,
         dx: 5,
         dy: 3,
+        stuckTo: null, // 'p1' | 'p2' | null
+        stickyOffsetY: 0,
       };
+
+      // Multiple balls support
+      let balls = [ball];
+
+      // Cheats and time scaling
+      const cheats = {
+        slowMo: false,
+        bigPaddles: false,
+        multiBall: false,
+        sticky: false,
+      };
+      let timeScale = 1; // 1 = normal, <1 = slow motion
+
+      // Visuals
+      let hueBase = 0; // cycles through 0..360
+      const particles = [];
+      function hsl(h, s, l) { return `hsl(${h}, ${s}%, ${l}%)`; }
+      function hsla(h, s, l, a) { return `hsla(${h}, ${s}%, ${l}%, ${a})`; }
+      function setShadow(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; }
 
       // Keyboard state
       const keys = {};
@@ -319,6 +350,16 @@
           if (gameStarted && !gameOver) {
             togglePause();
           }
+        }
+
+        // Cheat toggles (one-shot on keydown)
+        if (gameStarted && !gameOver) {
+          const k = e.key.toLowerCase();
+          if (k === "1") toggleSlowMo();
+          if (k === "2") toggleBigPaddles();
+          if (k === "3") toggleMultiBall();
+          if (k === "4") toggleSticky();
+          if (k === "f") releaseStickyBalls();
         }
       });
 
@@ -342,11 +383,13 @@
         player1.score = 0;
         player2.score = 0;
 
-        // Reset positions
-        player1.y = canvas.height / 2 - paddleHeight / 2;
-        player2.y = canvas.height / 2 - paddleHeight / 2;
+        // Reset paddle sizes and positions
+        player1.height = basePaddleHeight;
+        player2.height = basePaddleHeight;
+        player1.y = canvas.height / 2 - player1.height / 2;
+        player2.y = canvas.height / 2 - player2.height / 2;
 
-        resetBall();
+        resetBalls();
         draw();
       }
 
@@ -391,12 +434,14 @@
         player1.score = 0;
         player2.score = 0;
 
-        // Reset positions
-        player1.y = canvas.height / 2 - paddleHeight / 2;
-        player2.y = canvas.height / 2 - paddleHeight / 2;
+        // Reset paddle sizes and positions
+        player1.height = basePaddleHeight;
+        player2.height = basePaddleHeight;
+        player1.y = canvas.height / 2 - player1.height / 2;
+        player2.y = canvas.height / 2 - player2.height / 2;
 
-        // Reset ball
-        resetBall();
+        // Reset balls
+        resetBalls();
 
         // Unpause and hide menu
         gamePaused = false;
@@ -420,11 +465,13 @@
         player1.score = 0;
         player2.score = 0;
 
-        // Reset positions
-        player1.y = canvas.height / 2 - paddleHeight / 2;
-        player2.y = canvas.height / 2 - paddleHeight / 2;
+        // Reset paddle sizes and positions
+        player1.height = basePaddleHeight;
+        player2.height = basePaddleHeight;
+        player1.y = canvas.height / 2 - player1.height / 2;
+        player2.y = canvas.height / 2 - player2.height / 2;
 
-        resetBall();
+        resetBalls();
         draw();
       }
 
@@ -454,9 +501,11 @@
         player1.score = 0;
         player2.score = 0;
 
-        // Reset positions
-        player1.y = canvas.height / 2 - paddleHeight / 2;
-        player2.y = canvas.height / 2 - paddleHeight / 2;
+        // Reset paddle sizes and positions
+        player1.height = basePaddleHeight;
+        player2.height = basePaddleHeight;
+        player1.y = canvas.height / 2 - player1.height / 2;
+        player2.y = canvas.height / 2 - player2.height / 2;
 
         // Hide menus
         mainMenu.classList.add("hidden");
@@ -473,8 +522,10 @@
         } else {
           controlsText.innerHTML = "<strong>Player:</strong> W/S or ↑/↓";
         }
+        controlsText.innerHTML +=
+          "<br><span><strong>Cheats:</strong> [1] Slow-mo, [2] Big Paddles, [3] Multi-ball, [4] Sticky, [F] Release</span>";
 
-        resetBall();
+        resetBalls();
         gameLoop();
       }
 
@@ -482,19 +533,28 @@
         startGame(currentGameMode, currentDifficulty);
       }
 
-      function resetBall() {
-        ball.x = canvas.width / 2;
-        ball.y = canvas.height / 2;
-
-        // Reset speed to base speed
-        ball.speed = baseSpeed;
-
-        // Random direction
+      function createBall(directionOverride = 0) {
+        const b = {
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+          radius: 10,
+          speed: baseSpeed,
+          dx: 0,
+          dy: 0,
+          stuckTo: null,
+          stickyOffsetY: 0,
+          colorHue: Math.floor(Math.random() * 360),
+          trail: [], // array of {x,y}
+        };
         const angle = (Math.random() * Math.PI) / 2 - Math.PI / 4;
-        const direction = Math.random() < 0.5 ? 1 : -1;
+        const direction = directionOverride !== 0 ? directionOverride : Math.random() < 0.5 ? 1 : -1;
+        b.dx = Math.cos(angle) * b.speed * direction;
+        b.dy = Math.sin(angle) * b.speed;
+        return b;
+      }
 
-        ball.dx = Math.cos(angle) * ball.speed * direction;
-        ball.dy = Math.sin(angle) * ball.speed;
+      function resetBalls() {
+        balls = [createBall(0)];
       }
 
       function drawRect(x, y, width, height, color) {
@@ -530,20 +590,20 @@
       function updatePaddles() {
         // Player 1 controls (W/S)
         if (keys["w"] && player1.y > 0) {
-          player1.y -= paddleSpeed;
+          player1.y -= paddleSpeed * timeScale;
         }
-        if (keys["s"] && player1.y < canvas.height - paddleHeight) {
-          player1.y += paddleSpeed;
+        if (keys["s"] && player1.y < canvas.height - player1.height) {
+          player1.y += paddleSpeed * timeScale;
         }
 
         // Player 2 controls or AI
         if (gameMode === "friend") {
           // Player 2 manual controls (Arrow Up/Down)
           if (keys["arrowup"] && player2.y > 0) {
-            player2.y -= paddleSpeed;
+            player2.y -= paddleSpeed * timeScale;
           }
-          if (keys["arrowdown"] && player2.y < canvas.height - paddleHeight) {
-            player2.y += paddleSpeed;
+          if (keys["arrowdown"] && player2.y < canvas.height - player2.height) {
+            player2.y += paddleSpeed * timeScale;
           }
         } else if (gameMode === "ai") {
           // AI controls
@@ -553,53 +613,63 @@
         // Allow arrow keys as alternate controls for single player
         if (gameMode === "ai") {
           if (keys["arrowup"] && player1.y > 0) {
-            player1.y -= paddleSpeed;
+            player1.y -= paddleSpeed * timeScale;
           }
-          if (keys["arrowdown"] && player1.y < canvas.height - paddleHeight) {
-            player1.y += paddleSpeed;
+          if (keys["arrowdown"] && player1.y < canvas.height - player1.height) {
+            player1.y += paddleSpeed * timeScale;
           }
         }
       }
 
+      function getTargetBallForAI() {
+        // Prefer balls moving toward AI (dx > 0), choose closest to AI (max x)
+        let candidates = balls.filter((b) => b.dx > 0 && !b.stuckTo);
+        if (candidates.length === 0) candidates = balls.filter((b) => !b.stuckTo);
+        if (candidates.length === 0) return null;
+        return candidates.reduce((best, b) => (best == null || b.x > best.x ? b : best), null);
+      }
+
       function updateAI() {
-        const paddleCenter = player2.y + paddleHeight / 2;
-        let targetY = ball.y;
-        let aiSpeed = paddleSpeed;
+        const paddleCenter = player2.y + player2.height / 2;
+        const trackBall = getTargetBallForAI();
+        if (!trackBall) return;
+        let targetY = trackBall.y;
+        let aiSpeed = paddleSpeed * timeScale;
         let reactionDelay = 0;
 
         // Adjust AI behavior based on difficulty
         if (aiDifficulty === "easy") {
-          aiSpeed = paddleSpeed * 0.7;
+          aiSpeed = paddleSpeed * 0.7 * timeScale;
           reactionDelay = 50; // pixels of delay
           // React when ball is coming toward AI, or sometimes when ball is on player's side
-          if (ball.dx < 0 && Math.random() > 0.3) return;
+          if (trackBall.dx < 0 && Math.random() > 0.3) return;
         } else if (aiDifficulty === "medium") {
-          aiSpeed = paddleSpeed * 0.8;
+          aiSpeed = paddleSpeed * 0.8 * timeScale;
           reactionDelay = 30;
-          if (ball.dx < 0) return;
+          if (trackBall.dx < 0) return;
         } else if (aiDifficulty === "hard") {
-          aiSpeed = paddleSpeed * 0.95;
+          aiSpeed = paddleSpeed * 0.95 * timeScale;
           reactionDelay = 10;
         }
 
         // Add some prediction for harder difficulties
-        if (aiDifficulty === "hard" && ball.dx > 0) {
+        if (aiDifficulty === "hard" && trackBall.dx > 0) {
           // Predict where ball will be
-          const timeToReach = (canvas.width - ball.x) / Math.abs(ball.dx);
-          targetY = ball.y + ball.dy * timeToReach;
+          const timeToReach = (canvas.width - trackBall.x) / Math.abs(trackBall.dx);
+          targetY = trackBall.y + trackBall.dy * timeToReach;
 
           // Keep target in bounds
           targetY = Math.max(
-            paddleHeight / 2,
-            Math.min(canvas.height - paddleHeight / 2, targetY)
+            player2.height / 2,
+            Math.min(canvas.height - player2.height / 2, targetY)
           );
         }
 
         // Move paddle toward target
         if (paddleCenter < targetY - reactionDelay) {
           player2.y += aiSpeed;
-          if (player2.y > canvas.height - paddleHeight) {
-            player2.y = canvas.height - paddleHeight;
+          if (player2.y > canvas.height - player2.height) {
+            player2.y = canvas.height - player2.height;
           }
         } else if (paddleCenter > targetY + reactionDelay) {
           player2.y -= aiSpeed;
@@ -609,87 +679,181 @@
         }
       }
 
-      function updateBall() {
-        ball.x += ball.dx;
-        ball.y += ball.dy;
+      function releaseStickyBalls() {
+        balls.forEach((b) => {
+          if (b.stuckTo) {
+            const fromLeft = b.stuckTo === 'p1';
+            const angle = (b.stickyOffsetY / (fromLeft ? player1.height : player2.height)) * (Math.PI / 4);
+            b.dx = Math.cos(angle) * baseSpeed * (fromLeft ? 1 : -1);
+            b.dy = Math.sin(angle) * baseSpeed;
+            b.stuckTo = null;
+          }
+        });
+      }
+
+      function spawnParticles(x, y, baseHue, count = 12, speed = 4) {
+        for (let i = 0; i < count; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const spd = (Math.random() * 0.6 + 0.4) * speed;
+          particles.push({
+            x,
+            y,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd,
+            life: 1,
+            decay: Math.random() * 0.03 + 0.02,
+            size: Math.random() * 2 + 1,
+            hue: (baseHue + (Math.random() * 30 - 15) + 360) % 360,
+          });
+        }
+      }
+
+      function updateParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx * timeScale;
+          p.y += p.vy * timeScale;
+          p.vx *= 0.98;
+          p.vy *= 0.98;
+          p.life -= p.decay * timeScale;
+          if (p.life <= 0) particles.splice(i, 1);
+        }
+      }
+
+      function drawParticles() {
+        for (const p of particles) {
+          const a = Math.max(0, p.life);
+          ctx.save();
+          setShadow(hsla(p.hue, 100, 60, a), 12);
+          ctx.fillStyle = hsla(p.hue, 100, 60, a);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      function updateSingleBall(b) {
+        // If stuck to a paddle, follow paddle position
+        if (b.stuckTo === 'p1') {
+          b.x = player1.x + player1.width + b.radius;
+          b.y = player1.y + player1.height / 2 + b.stickyOffsetY;
+          // keep trail smooth
+          b.trail.push({ x: b.x, y: b.y });
+          if (b.trail.length > 12) b.trail.shift();
+          return null;
+        }
+        if (b.stuckTo === 'p2') {
+          b.x = player2.x - b.radius;
+          b.y = player2.y + player2.height / 2 + b.stickyOffsetY;
+          b.trail.push({ x: b.x, y: b.y });
+          if (b.trail.length > 12) b.trail.shift();
+          return null;
+        }
+
+        b.x += b.dx * timeScale;
+        b.y += b.dy * timeScale;
+
+        // trail
+        b.trail.push({ x: b.x, y: b.y });
+        if (b.trail.length > 12) b.trail.shift();
 
         // Top and bottom wall collision
-        if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
-          ball.dy *= -1;
+        if (b.y - b.radius < 0 || b.y + b.radius > canvas.height) {
+          b.dy *= -1;
+          const yBounce = b.y - b.radius < 0 ? b.radius : canvas.height - b.radius;
+          spawnParticles(b.x, yBounce, b.colorHue, 8, 3);
         }
 
         // Paddle collision - Player 1
         if (
-          ball.x - ball.radius < player1.x + player1.width &&
-          ball.x + ball.radius > player1.x &&
-          ball.y > player1.y &&
-          ball.y < player1.y + player1.height
+          b.x - b.radius < player1.x + player1.width &&
+          b.x + b.radius > player1.x &&
+          b.y > player1.y &&
+          b.y < player1.y + player1.height
         ) {
-          // Calculate angle based on where ball hits paddle
-          const hitPos =
-            (ball.y - (player1.y + player1.height / 2)) / (player1.height / 2);
-          const angle = (hitPos * Math.PI) / 4;
-
-          ball.dx = Math.abs(ball.dx);
-          ball.dy = baseSpeed * Math.sin(angle);
-
-          // Increase speed slightly with cap
-          ball.dx *= 1.05;
-          ball.dy *= 1.05;
-
-          // Cap maximum speed at 2x base speed
-          const maxSpeed = baseSpeed * 2;
-          const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-          if (currentSpeed > maxSpeed) {
-            ball.dx = (ball.dx / currentSpeed) * maxSpeed;
-            ball.dy = (ball.dy / currentSpeed) * maxSpeed;
+          const hitPos = (b.y - (player1.y + player1.height / 2)) / (player1.height / 2);
+          if (cheats.sticky) {
+            b.stuckTo = 'p1';
+            b.stickyOffsetY = hitPos * (player1.height / 2);
+            b.dx = 0; b.dy = 0;
+            spawnParticles(player1.x + player1.width, b.y, 180, 14, 4);
+          } else {
+            const angle = (hitPos * Math.PI) / 4;
+            b.dx = Math.abs(b.dx);
+            b.dy = baseSpeed * Math.sin(angle);
+            // Increase speed slightly with cap
+            b.dx *= 1.05;
+            b.dy *= 1.05;
+            const maxSpeed = baseSpeed * 2;
+            const currentSpeed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+            if (currentSpeed > maxSpeed) {
+              b.dx = (b.dx / currentSpeed) * maxSpeed;
+              b.dy = (b.dy / currentSpeed) * maxSpeed;
+            }
+            b.speed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+            spawnParticles(player1.x + player1.width, b.y, 180, 12, 5);
           }
-
-          // Update ball.speed to match actual speed
-          ball.speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
         }
 
         // Paddle collision - Player 2
         if (
-          ball.x + ball.radius > player2.x &&
-          ball.x - ball.radius < player2.x + player2.width &&
-          ball.y > player2.y &&
-          ball.y < player2.y + player2.height
+          b.x + b.radius > player2.x &&
+          b.x - b.radius < player2.x + player2.width &&
+          b.y > player2.y &&
+          b.y < player2.y + player2.height
         ) {
-          const hitPos =
-            (ball.y - (player2.y + player2.height / 2)) / (player2.height / 2);
-          const angle = (hitPos * Math.PI) / 4;
-
-          ball.dx = -Math.abs(ball.dx);
-          ball.dy = baseSpeed * Math.sin(angle);
-
-          // Increase speed slightly with cap
-          ball.dx *= 1.05;
-          ball.dy *= 1.05;
-
-          // Cap maximum speed at 2x base speed
-          const maxSpeed = baseSpeed * 2;
-          const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-          if (currentSpeed > maxSpeed) {
-            ball.dx = (ball.dx / currentSpeed) * maxSpeed;
-            ball.dy = (ball.dy / currentSpeed) * maxSpeed;
+          const hitPos = (b.y - (player2.y + player2.height / 2)) / (player2.height / 2);
+          if (cheats.sticky) {
+            b.stuckTo = 'p2';
+            b.stickyOffsetY = hitPos * (player2.height / 2);
+            b.dx = 0; b.dy = 0;
+            spawnParticles(player2.x, b.y, 300, 14, 4);
+          } else {
+            const angle = (hitPos * Math.PI) / 4;
+            b.dx = -Math.abs(b.dx);
+            b.dy = baseSpeed * Math.sin(angle);
+            b.dx *= 1.05;
+            b.dy *= 1.05;
+            const maxSpeed = baseSpeed * 2;
+            const currentSpeed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+            if (currentSpeed > maxSpeed) {
+              b.dx = (b.dx / currentSpeed) * maxSpeed;
+              b.dy = (b.dy / currentSpeed) * maxSpeed;
+            }
+            b.speed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+            spawnParticles(player2.x, b.y, 300, 12, 5);
           }
-
-          // Update ball.speed to match actual speed
-          ball.speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
         }
 
         // Score points
-        if (ball.x - ball.radius < 0) {
-          player2.score++;
-          checkWinner();
-          resetBall();
+        if (b.x - b.radius < 0) {
+          return { score: 'right', x: b.x, y: b.y, hue: b.colorHue };
         }
+        if (b.x + b.radius > canvas.width) {
+          return { score: 'left', x: b.x, y: b.y, hue: b.colorHue };
+        }
+        return null;
+      }
 
-        if (ball.x + ball.radius > canvas.width) {
-          player1.score++;
-          checkWinner();
-          resetBall();
+      function updateBalls() {
+        // Update all balls and handle scoring
+        for (let i = 0; i < balls.length; i++) {
+          const result = updateSingleBall(balls[i]);
+          if (result && result.score === 'right') {
+            player2.score++;
+            spawnParticles(canvas.width - 30, result.y, result.hue, 24, 6);
+            checkWinner();
+            resetBalls();
+            return;
+          }
+          if (result && result.score === 'left') {
+            player1.score++;
+            spawnParticles(30, result.y, result.hue, 24, 6);
+            checkWinner();
+            resetBalls();
+            return;
+          }
         }
       }
 
@@ -724,36 +888,89 @@
         scoreText.textContent = `Final Score: ${player1.score} - ${player2.score}`;
       }
 
-      function draw() {
-        // Clear canvas with black background
-        ctx.fillStyle = "#000000";
+      function drawBackground() {
+        const h1 = (hueBase) % 360;
+        const h2 = (hueBase + 60) % 360;
+        const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        grad.addColorStop(0, hsla(h1, 60, 8, 1));
+        grad.addColorStop(1, hsla(h2, 60, 8, 1));
+        ctx.fillStyle = grad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // subtle moving scanlines
+        ctx.save();
+        ctx.globalAlpha = 0.08;
+        ctx.fillStyle = "#ffffff";
+        const offset = (Date.now() / 40) % 8;
+        for (let y = -offset; y < canvas.height; y += 8) {
+          ctx.fillRect(0, y, canvas.width, 2);
+        }
+        ctx.restore();
+      }
+
+      function draw() {
+        // Clear canvas with black background
+        drawBackground();
+
         // Draw center line
-        drawDashedLine();
+        ctx.save();
+        const midHue = (hueBase + 180) % 360;
+        ctx.strokeStyle = hsl(midHue, 100, 50);
+        ctx.lineWidth = 2;
+        setShadow(hsl(midHue, 100, 50), 12);
+        ctx.setLineDash([12, 12]);
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, 0);
+        ctx.lineTo(canvas.width / 2, canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
 
         // Draw paddles in white
-        drawRect(
-          player1.x,
-          player1.y,
-          player1.width,
-          player1.height,
-          "#ffffff"
-        );
-        drawRect(
-          player2.x,
-          player2.y,
-          player2.width,
-          player2.height,
-          "#ffffff"
-        );
+        ctx.save();
+        const p1Color = hsl(180, 100, 60);
+        setShadow(p1Color, 20);
+        drawRect(player1.x, player1.y, player1.width, player1.height, p1Color);
+        ctx.restore();
+        ctx.save();
+        const p2Color = hsl(300, 100, 60);
+        setShadow(p2Color, 20);
+        drawRect(player2.x, player2.y, player2.width, player2.height, p2Color);
+        ctx.restore();
 
-        // Draw ball in white
-        drawCircle(ball.x, ball.y, ball.radius, "#ffffff");
+        // Draw particles behind balls for nice layering
+        drawParticles();
+
+        // Draw balls with trails
+        for (const b of balls) {
+          // trail
+          for (let i = 0; i < b.trail.length; i++) {
+            const t = b.trail[i];
+            const alpha = (i + 1) / b.trail.length * 0.5;
+            const col = hsla(b.colorHue, 100, 60, alpha);
+            ctx.save();
+            setShadow(col, 12);
+            drawCircle(t.x, t.y, Math.max(2, b.radius - (b.trail.length - i) * 0.3), col);
+            ctx.restore();
+          }
+          const ballColor = hsl(b.colorHue, 100, 60);
+          ctx.save();
+          setShadow(ballColor, 25);
+          drawCircle(b.x, b.y, b.radius, ballColor);
+          ctx.restore();
+        }
 
         // Draw scores with cyan accent
-        drawText(player1.score, canvas.width / 4, 60, "#00ffff", 48);
-        drawText(player2.score, (3 * canvas.width) / 4, 60, "#00ffff", 48);
+        ctx.save();
+        const scoreGlow1 = hsl(180, 100, 60);
+        setShadow(scoreGlow1, 18);
+        drawText(player1.score, canvas.width / 4, 70, scoreGlow1, 54);
+        ctx.restore();
+        ctx.save();
+        const scoreGlow2 = hsl(300, 100, 60);
+        setShadow(scoreGlow2, 18);
+        drawText(player2.score, (3 * canvas.width) / 4, 70, scoreGlow2, 54);
+        ctx.restore();
       }
 
       function gameLoop() {
@@ -761,7 +978,9 @@
 
         if (!gamePaused && !gameOver) {
           updatePaddles();
-          updateBall();
+          updateBalls();
+          updateParticles();
+          hueBase = (hueBase + 0.6 * timeScale) % 360;
         }
 
         draw();
@@ -771,7 +990,43 @@
 
       // Initial draw
       draw();
+
+      // Cheat helpers
+      function toggleSlowMo() {
+        cheats.slowMo = !cheats.slowMo;
+        timeScale = cheats.slowMo ? 0.4 : 1;
+      }
+
+      function toggleBigPaddles() {
+        cheats.bigPaddles = !cheats.bigPaddles;
+        const newHeight = cheats.bigPaddles ? basePaddleHeight * 1.8 : basePaddleHeight;
+        const p1Center = player1.y + player1.height / 2;
+        const p2Center = player2.y + player2.height / 2;
+        player1.height = newHeight;
+        player2.height = newHeight;
+        player1.y = Math.max(0, Math.min(canvas.height - player1.height, p1Center - player1.height / 2));
+        player2.y = Math.max(0, Math.min(canvas.height - player2.height, p2Center - player2.height / 2));
+      }
+
+      function toggleMultiBall() {
+        cheats.multiBall = !cheats.multiBall;
+        if (cheats.multiBall) {
+          // Add two more balls with different directions
+          const b1 = createBall(-1);
+          const b2 = createBall(1);
+          balls.push(b1, b2);
+        } else {
+          resetBalls();
+        }
+      }
+
+      function toggleSticky() {
+        cheats.sticky = !cheats.sticky;
+        if (!cheats.sticky) {
+          // When turning off, release any stuck balls immediately
+          releaseStickyBalls();
+        }
+      }
     </script>
   </body>
 </html>
-It
